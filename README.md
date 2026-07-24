@@ -12,6 +12,16 @@ http://127.0.0.1:13458
 
 首次运行不会预填服务器地址、用户名或 CCR 端口。用户可以选择记住服务器、SSH 端口、用户名、CCR 端口和本地端口；SSH 密码只在当前连接期间用于认证，不写入配置文件或日志，而且每次发起连接后都会立即从输入框清除。关闭应用或点击“断开连接”会关闭隧道。
 
+## 推荐使用流程
+
+1. 在 Linux 服务器上使用 [CCR Docker 快速部署](https://github.com/AlexQFMM2/ccrAdmin/tree/main/deploy/ccr) 安装 CCR；
+2. 保持 CCR 管理端口只监听服务器 `127.0.0.1`；
+3. 从 [GitHub Releases](https://github.com/AlexQFMM2/ccrAdmin/releases/latest) 下载 Windows 管理工具；
+4. 输入服务器 SSH 信息和部署 `.env` 中的 `CCR_HOST_PORT`；
+5. 连接后点击“打开 CCR 管理界面”。
+
+部署脚本会生成随机管理 Token、固定经过验证的上游 CCR 版本，并排除 `.env`、运行数据和源码克隆目录。完整命令、安全说明和更新方法见 [deploy/ccr/README.md](deploy/ccr/README.md)。
+
 ## 运行
 
 需要 Python 3.10 或更高版本。
@@ -67,13 +77,14 @@ Artifact 名称为 `ccrAdmin-windows-x64`，压缩包内包含：
 ccrAdmin.exe
 README.md
 新电脑接入_myModels_CCR_指南.md
+deploy/ccr/
 ```
 
 发布新版本示例：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## 安全约束

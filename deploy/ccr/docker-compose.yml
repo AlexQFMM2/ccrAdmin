@@ -1,0 +1,25 @@
+services:
+  ccr:
+    container_name: ccr
+    build:
+      context: ./app
+      dockerfile: ../Dockerfile.tencent
+    image: claude-code-router:local
+    ports:
+      - "${CCR_BIND_HOST:-127.0.0.1}:${CCR_HOST_PORT:-18080}:8080"
+    environment:
+      CCR_PUBLIC_BASE_URL: "${CCR_PUBLIC_BASE_URL:-http://127.0.0.1:18080}"
+      CCR_WEB_AUTH_TOKEN: "${CCR_WEB_AUTH_TOKEN:?Set CCR_WEB_AUTH_TOKEN in .env}"
+    volumes:
+      - ccr-data:/data
+    restart: unless-stopped
+    mem_limit: 768m
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  ccr-data:

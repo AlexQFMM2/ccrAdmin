@@ -16,9 +16,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate-deployment:
+    name: Validate Docker deployment files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment script
+        run: bash -n deploy/ccr/deploy.sh
+
+      - name: Validate Compose configuration
+        working-directory: deploy/ccr
+        run: docker compose --env-file .env.example config --quiet
+
   build-windows:
     name: Build Windows x64 portable package
     runs-on: windows-latest
+    needs: validate-deployment
 
     steps:
       - name: Checkout
@@ -60,6 +76,8 @@ jobs:
           Copy-Item dist\ccrAdmin.exe release\ccrAdmin\ccrAdmin.exe
           Copy-Item README.md release\ccrAdmin\README.md
           Copy-Item "新电脑接入_myModels_CCR_指南.md" release\ccrAdmin\
+          New-Item -ItemType Directory -Force -Path release\ccrAdmin\deploy | Out-Null
+          Copy-Item deploy\ccr release\ccrAdmin\deploy\ccr -Recurse
           Compress-Archive `
             -Path release\ccrAdmin\* `
             -DestinationPath ccrAdmin-windows-x64.zip `

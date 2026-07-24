@@ -7,3 +7,6 @@ build/
 dist/
 release/
 *.spec
+/deploy/ccr/.env
+/deploy/ccr/app/
+/deploy/ccr/data/
