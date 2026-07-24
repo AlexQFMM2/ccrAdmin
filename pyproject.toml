@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccr-admin"
+version = "0.2.0"
+description = "Local SSH tunnel manager for myModels CCR"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.5,<7",
+    "paramiko>=3.4,<5",
+]
+
+[project.scripts]
+ccr-admin = "ccr_admin.app:main"
+
+[tool.setuptools.packages.find]
+include = ["ccr_admin*"]
