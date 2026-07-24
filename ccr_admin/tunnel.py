@@ -22,7 +22,7 @@ else:
     PARAMIKO_IMPORT_ERROR = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class TunnelConfig:
     host: str
     ssh_port: int
@@ -169,7 +169,12 @@ class TunnelController(QObject):
             if self._stop_event.is_set():
                 return
 
-            transport.auth_password(config.username, config.password, fallback=True)
+            password = config.password
+            try:
+                transport.auth_password(config.username, password, fallback=True)
+            finally:
+                config.password = ""
+                password = ""
             if not transport.is_authenticated():
                 raise RuntimeError("SSH 用户名或密码不正确。")
 
@@ -186,6 +191,7 @@ class TunnelController(QObject):
             if not self._stop_event.is_set():
                 self.error.emit(self._friendly_error(exc, config))
         finally:
+            config.password = ""
             if server is not None:
                 server.server_close()
             if transport is not None:
