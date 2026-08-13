@@ -1,19 +1,80 @@
-From 54862cce933e270246cce4d6dbd9bf1181dac7b1 Mon Sep 17 00:00:00 2001
+From d95563f97d4cbdda50ef9b3e55ae82c3f90fa136 Mon Sep 17 00:00:00 2001
 From: AlexQFMM2 <2161582897@qq.com>
 Date: Thu, 13 Aug 2026 09:34:57 +0800
 Subject: [PATCH] feat: add Bilibili MCP administration
 
 ---
+ build/esbuild.config.mjs                      |   5 +-
+ build/test.mjs                                |   1 +
  packages/core/src/contracts/app.ts            |  13 ++
  packages/core/src/entrypoints/server.ts       |   2 +-
- packages/core/src/web/management-server.ts    | 120 ++++++++++++++++
- .../ui/src/pages/home/components/settings.tsx | 131 +++++++++++++++++-
+ .../gateway/core-runtime/config-compiler.ts   |   3 +-
+ packages/core/src/mcp/fusion-config.ts        |  18 +-
+ .../core/src/mcp/remote-http-proxy-config.ts  |  25 +++
+ .../core/src/mcp/remote-http-proxy-mcp.ts     | 181 ++++++++++++++++++
+ packages/core/src/profiles/launch-service.ts  |   1 +
+ packages/core/src/web/management-server.ts    | 120 ++++++++++++
+ .../gateway/gateway-virtual-models.test.mjs   |  19 ++
+ .../mcp/remote-http-proxy-mcp.test.mjs        | 120 ++++++++++++
+ .../ui/src/pages/home/components/settings.tsx | 131 ++++++++++++-
  packages/ui/src/pages/home/shared/i18n.tsx    |   3 +
  packages/ui/src/pages/home/shared/types.ts    |   2 +-
  packages/ui/src/types/electron.d.ts           |   2 +
  packages/ui/src/web-client-bridge.ts          |   1 +
- 8 files changed, 270 insertions(+), 4 deletions(-)
+ 17 files changed, 639 insertions(+), 8 deletions(-)
+ create mode 100644 packages/core/src/mcp/remote-http-proxy-config.ts
+ create mode 100644 packages/core/src/mcp/remote-http-proxy-mcp.ts
+ create mode 100644 packages/core/test/integration/mcp/remote-http-proxy-mcp.test.mjs
 
+diff --git a/build/esbuild.config.mjs b/build/esbuild.config.mjs
+index 367dc67..fc8c6a8 100644
+--- a/build/esbuild.config.mjs
++++ b/build/esbuild.config.mjs
+@@ -69,7 +69,7 @@ export const cssOutput = path.join(rendererAssetsDir, "main.css");
+ export const webClientBridgeOutput = path.join(rendererAssetsDir, "web-client-bridge.js");
+ export const electronUndiciProxyAgentInput = path.join(coreSourceRoot, "proxy", "undici-proxy-agent.ts");
+ export const upstreamHeaderSanitizerInput = path.join(coreSourceRoot, "gateway", "core-runtime", "upstream-header-sanitizer.ts");
+-const lightweightMcpBundleNames = ["browser-web-search-proxy-mcp.js", "fusion-vision-mcp.js", "fusion-tool-fallback-mcp.js", "media-tools-proxy-mcp.js"];
++const lightweightMcpBundleNames = ["browser-web-search-proxy-mcp.js", "fusion-vision-mcp.js", "fusion-tool-fallback-mcp.js", "media-tools-proxy-mcp.js", "remote-http-proxy-mcp.js"];
+ const lightweightMcpBundleMaxBytes = 128 * 1024;
+ const forbiddenLightweightMcpInputs = [
+   { prefix: "packages/core/src/config/", reason: "config modules can pull in native storage side effects" },
+@@ -220,6 +220,7 @@ export function createMainBuildOptions({ mode = "production", plugins = [] } = {
+       path.join(coreSourceRoot, "mcp", "fusion-vision-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "fusion-tool-fallback-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "media-tools-proxy-mcp.ts"),
++      path.join(coreSourceRoot, "mcp", "remote-http-proxy-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "toolhub-mcp.ts"),
+       path.join(coreSourceRoot, "observability", "request-log-worker.ts"),
+       path.join(coreSourceRoot, "routing", "route-script-worker.ts"),
+@@ -251,6 +252,7 @@ export function createCliBuildOptions({ mode = "production", plugins = [] } = {}
+       path.join(coreSourceRoot, "mcp", "fusion-vision-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "fusion-tool-fallback-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "media-tools-proxy-mcp.ts"),
++      path.join(coreSourceRoot, "mcp", "remote-http-proxy-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "toolhub-mcp.ts"),
+       path.join(coreSourceRoot, "observability", "request-log-worker.ts"),
+       path.join(coreSourceRoot, "routing", "route-script-worker.ts"),
+@@ -279,6 +281,7 @@ export function createCoreServerBuildOptions({ mode = "production", plugins = []
+       path.join(coreSourceRoot, "mcp", "fusion-vision-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "fusion-tool-fallback-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "media-tools-proxy-mcp.ts"),
++      path.join(coreSourceRoot, "mcp", "remote-http-proxy-mcp.ts"),
+       path.join(coreSourceRoot, "mcp", "toolhub-mcp.ts"),
+       path.join(coreSourceRoot, "observability", "request-log-worker.ts"),
+       path.join(coreSourceRoot, "routing", "route-script-worker.ts"),
+diff --git a/build/test.mjs b/build/test.mjs
+index 5b98215..7ce89bb 100644
+--- a/build/test.mjs
++++ b/build/test.mjs
+@@ -26,6 +26,7 @@ const testProjects = {
+     runtimeEntryPoints: {
+       "runtime/fusion-vision-mcp": path.join(packageRoots.core, "mcp", "fusion-vision-mcp.ts"),
+       "runtime/media-tools-proxy-mcp": path.join(packageRoots.core, "mcp", "media-tools-proxy-mcp.ts"),
++      "runtime/remote-http-proxy-mcp": path.join(packageRoots.core, "mcp", "remote-http-proxy-mcp.ts"),
+       "runtime/request-log-worker": path.join(packageRoots.core, "observability", "request-log-worker.ts"),
+       "runtime/route-script-worker": path.join(packageRoots.core, "routing", "route-script-worker.ts"),
+       "runtime/upstream-header-sanitizer": path.join(packageRoots.core, "gateway", "core-runtime", "upstream-header-sanitizer.ts"),
 diff --git a/packages/core/src/contracts/app.ts b/packages/core/src/contracts/app.ts
 index db51aff..c1ed721 100644
 --- a/packages/core/src/contracts/app.ts
@@ -51,6 +112,307 @@ index 2059d8a..f6fec2a 100644
  
    let closing = false;
    const shutdown = (signal: NodeJS.Signals) => {
+diff --git a/packages/core/src/gateway/core-runtime/config-compiler.ts b/packages/core/src/gateway/core-runtime/config-compiler.ts
+index 0a27361..d09636d 100644
+--- a/packages/core/src/gateway/core-runtime/config-compiler.ts
++++ b/packages/core/src/gateway/core-runtime/config-compiler.ts
+@@ -9,6 +9,7 @@ import { pluginService } from "@ccr/core/plugins/service";
+ import { normalizeRouteSelector, providerRuntimeId } from "@ccr/core/routing/model-registry";
+ import { isRecord, stringListValue, stringValue } from "@ccr/core/gateway/internal/value";
+ import { fusionBuiltinToolArtifacts, fusionToolFallbackMcpServer, normalizeFusionWebSearchProfileToolName, toolHubMcpServer, withCodexCompatibleVirtualModelProfiles, withFusionVirtualModelAliases, withFusionWebSearchToolInstructions } from "@ccr/core/mcp/fusion-config";
++import { remoteMcpServerForCoreGateway } from "@ccr/core/mcp/remote-http-proxy-config";
+ import { mediaToolsMcpServer } from "@ccr/core/mcp/grok-media-config";
+ import { resolveGatewayPublicModelId } from "@ccr/core/gateway/features/model-discovery";
+ import { activeProviderCredentials, inferProtocol, normalizedProviderCapabilities, normalizeProviderProtocol, providerCapabilityForClientProtocol, providerCapabilityInternalName, providerCredentialInternalName, providerProtocolForClientProtocol, sortProviderCredentialsForConfig, toCoreGatewayProviders } from "@ccr/core/providers/runtime-topology";
+@@ -86,7 +87,7 @@ export async function compileCoreGatewayConfig(
+   const mcpServers = [
+     ...builtinToolArtifacts.mcpServers,
+     ...(mediaMcpServer ? [mediaMcpServer] : []),
+-    ...(toolHubServer ? [toolHubServer] : externalMcpServers)
++    ...(toolHubServer ? [toolHubServer] : externalMcpServers.map(remoteMcpServerForCoreGateway))
+   ];
+   const fallbackMcpServer = fusionToolFallbackMcpServer(virtualModelProfiles, [
+     ...builtinToolArtifacts.mcpServers,
+diff --git a/packages/core/src/mcp/fusion-config.ts b/packages/core/src/mcp/fusion-config.ts
+index 018d77d..87cafbd 100644
+--- a/packages/core/src/mcp/fusion-config.ts
++++ b/packages/core/src/mcp/fusion-config.ts
+@@ -163,7 +163,7 @@ export function fusionToolFallbackMcpServer(
+   profiles: unknown[],
+   existingServers: unknown[]
+ ): GatewayMcpServerConfig | undefined {
+-  const tools = fusionFallbackToolDefinitions(profiles, fusionToolNamesBackedByMcpServers(existingServers));
++  const tools = fusionFallbackToolDefinitions(profiles, fusionToolNamesBackedByMcpServers(existingServers, profiles));
+   if (tools.length === 0) {
+     return undefined;
+   }
+@@ -336,14 +336,16 @@ function browserWebSearchFallbackToolDefinition(
+ }
+ 
+ 
+-export function fusionToolNamesBackedByMcpServers(servers: unknown[]): Set<string> {
++export function fusionToolNamesBackedByMcpServers(servers: unknown[], profiles: unknown[] = []): Set<string> {
+   const names = new Set<string>();
++  const serverNames = new Set<string>();
+   for (const server of servers) {
+     if (!isRecord(server)) {
+       continue;
+     }
+     const serverName = stringValue(server.name);
+     if (serverName) {
++      serverNames.add(serverName);
+       names.add(serverName);
+       if (serverName === MEDIA_TOOLS_MCP_SERVER_NAME) {
+         for (const toolName of GROK_MEDIA_FUSION_TOOL_NAMES) names.add(toolName);
+@@ -356,6 +358,18 @@ export function fusionToolNamesBackedByMcpServers(servers: unknown[]): Set<strin
+       names.add(fusionToolName);
+     }
+   }
++  for (const profile of profiles) {
++    if (!isRecord(profile) || profile.enabled === false) continue;
++    const metadata = isRecord(profile.metadata) ? profile.metadata : undefined;
++    const fusionTool = isRecord(metadata?.fusionTool) ? metadata.fusionTool : undefined;
++    const mcpServerName = stringValue(fusionTool?.mcpServerName);
++    if (!mcpServerName || !serverNames.has(mcpServerName) || !Array.isArray(profile.tools)) continue;
++    for (const tool of profile.tools) {
++      if (!isRecord(tool)) continue;
++      const toolName = stringValue(tool.name);
++      if (toolName) names.add(toolName);
++    }
++  }
+   return names;
+ }
+ 
+diff --git a/packages/core/src/mcp/remote-http-proxy-config.ts b/packages/core/src/mcp/remote-http-proxy-config.ts
+new file mode 100644
+index 0000000..d223259
+--- /dev/null
++++ b/packages/core/src/mcp/remote-http-proxy-config.ts
+@@ -0,0 +1,25 @@
++import { join as pathJoin } from "node:path";
++import type { GatewayMcpServerConfig, GatewayMcpStdioServerConfig } from "@ccr/core/contracts/app";
++
++export function remoteMcpServerForCoreGateway(server: GatewayMcpServerConfig): GatewayMcpStdioServerConfig {
++  if (server.transport === "stdio") return server;
++  return {
++    args: [pathJoin(__dirname, "remote-http-proxy-mcp.js")],
++    command: process.execPath,
++    env: {
++      ELECTRON_RUN_AS_NODE: "1",
++      CCR_REMOTE_MCP_URL: server.url,
++      CCR_REMOTE_MCP_PROTOCOL_VERSION: server.protocolVersion,
++      CCR_REMOTE_MCP_REQUEST_TIMEOUT_MS: String(server.requestTimeoutMs),
++      ...(Object.keys(server.headers).length ? { CCR_REMOTE_MCP_HEADERS_JSON: JSON.stringify(server.headers) } : {}),
++      ...(server.apiKey ? { CCR_REMOTE_MCP_API_KEY: server.apiKey } : {}),
++      ...(server.apiKeyEnv ? { CCR_REMOTE_MCP_API_KEY_ENV: server.apiKeyEnv } : {})
++    },
++    name: server.name,
++    protocolVersion: server.protocolVersion,
++    requestTimeoutMs: server.requestTimeoutMs,
++    startupTimeoutMs: server.startupTimeoutMs,
++    stdioMessageMode: "content-length",
++    transport: "stdio"
++  };
++}
+diff --git a/packages/core/src/mcp/remote-http-proxy-mcp.ts b/packages/core/src/mcp/remote-http-proxy-mcp.ts
+new file mode 100644
+index 0000000..bebab14
+--- /dev/null
++++ b/packages/core/src/mcp/remote-http-proxy-mcp.ts
+@@ -0,0 +1,181 @@
++type JsonPrimitive = boolean | null | number | string;
++type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
++type JsonRpcId = null | number | string;
++type JsonRpcMessage = {
++  error?: { code?: number; message?: string };
++  id?: JsonRpcId;
++  jsonrpc?: string;
++  method?: string;
++  params?: unknown;
++  result?: JsonValue;
++};
++
++const targetUrl = requiredEnv("CCR_REMOTE_MCP_URL");
++const protocolVersion = env("CCR_REMOTE_MCP_PROTOCOL_VERSION") ?? "2024-11-05";
++const requestTimeoutMs = clampInteger(Number(env("CCR_REMOTE_MCP_REQUEST_TIMEOUT_MS")), 1_000, 3_600_000, 120_000);
++const apiKeyEnv = env("CCR_REMOTE_MCP_API_KEY_ENV");
++const directApiKey = env("CCR_REMOTE_MCP_API_KEY");
++const configuredHeaders = readHeaders();
++
++let inputBuffer = Buffer.alloc(0);
++let sessionId = "";
++
++process.stdin.on("data", (chunk) => {
++  inputBuffer = Buffer.concat([inputBuffer, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
++  void drainInputBuffer().catch((error) => {
++    writeJsonRpc(jsonRpcError(null, -32603, formatError(error)));
++  });
++});
++process.stdin.resume();
++
++async function drainInputBuffer(): Promise<void> {
++  while (true) {
++    const delimiter = contentLengthDelimiter(inputBuffer);
++    if (!delimiter) return;
++    const header = inputBuffer.subarray(0, delimiter.index).toString("utf8");
++    const match = /content-length\s*:\s*(\d+)/i.exec(header);
++    if (!match) {
++      inputBuffer = inputBuffer.subarray(delimiter.index + delimiter.length);
++      writeJsonRpc(jsonRpcError(null, -32600, "Missing or invalid Content-Length header."));
++      continue;
++    }
++    const contentLength = Number(match[1]);
++    const bodyStart = delimiter.index + delimiter.length;
++    const bodyEnd = bodyStart + contentLength;
++    if (inputBuffer.length < bodyEnd) return;
++    const body = inputBuffer.subarray(bodyStart, bodyEnd).toString("utf8");
++    inputBuffer = inputBuffer.subarray(bodyEnd);
++
++    let message: JsonRpcMessage;
++    try {
++      const parsed = JSON.parse(body) as unknown;
++      if (!isRecord(parsed)) throw new Error("JSON-RPC request must be an object.");
++      message = parsed as JsonRpcMessage;
++    } catch (error) {
++      writeJsonRpc(jsonRpcError(null, -32700, `Invalid JSON-RPC request: ${formatError(error)}`));
++      continue;
++    }
++
++    const response = await forward(message);
++    if (response) writeJsonRpc(response);
++  }
++}
++
++async function forward(message: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
++  const controller = new AbortController();
++  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
++  try {
++    const headers: Record<string, string> = {
++      accept: "application/json, text/event-stream",
++      "content-type": "application/json",
++      "mcp-protocol-version": protocolVersion,
++      ...configuredHeaders
++    };
++    if (sessionId) headers["mcp-session-id"] = sessionId;
++    const apiKey = directApiKey ?? (apiKeyEnv ? env(apiKeyEnv) : undefined);
++    if (apiKey && !hasHeader(headers, "authorization")) headers.authorization = `Bearer ${apiKey}`;
++
++    const response = await fetch(targetUrl, {
++      body: JSON.stringify(message),
++      headers,
++      method: "POST",
++      signal: controller.signal
++    });
++    sessionId = response.headers.get("mcp-session-id")?.trim() || sessionId;
++    const text = await response.text();
++    if (!response.ok) {
++      return message.id === undefined
++        ? undefined
++        : jsonRpcError(message.id ?? null, -32603, `Remote MCP endpoint returned HTTP ${response.status}.`);
++    }
++    if (message.id === undefined || !text.trim()) return undefined;
++    const parsed = parseResponse(text, message.id);
++    return parsed ?? jsonRpcError(message.id ?? null, -32603, "Remote MCP endpoint returned an invalid JSON-RPC response.");
++  } catch (error) {
++    if (message.id === undefined) return undefined;
++    return jsonRpcError(message.id ?? null, -32603, formatError(error));
++  } finally {
++    clearTimeout(timeout);
++  }
++}
++
++function parseResponse(text: string, expectedId: JsonRpcId | undefined): JsonRpcMessage | undefined {
++  const trimmed = text.trim();
++  if (!trimmed) return undefined;
++  if (trimmed.startsWith("event:") || trimmed.startsWith("data:")) {
++    const messages: JsonRpcMessage[] = [];
++    for (const block of trimmed.split(/\r?\n\r?\n/)) {
++      const data = block.split(/\r?\n/)
++        .filter((line) => line.startsWith("data:"))
++        .map((line) => line.slice(5).trimStart())
++        .join("\n");
++      const parsed = parseJson(data);
++      if (isRecord(parsed)) messages.push(parsed as JsonRpcMessage);
++    }
++    return messages.find((item) => item.id === expectedId) ?? messages[0];
++  }
++  const parsed = parseJson(trimmed);
++  const messages = Array.isArray(parsed) ? parsed : [parsed];
++  return messages.filter(isRecord).map((item) => item as JsonRpcMessage)
++    .find((item) => item.id === expectedId) ?? messages.find(isRecord) as JsonRpcMessage | undefined;
++}
++
++function readHeaders(): Record<string, string> {
++  const raw = env("CCR_REMOTE_MCP_HEADERS_JSON");
++  const parsed = raw ? parseJson(raw) : undefined;
++  if (!isRecord(parsed)) return {};
++  return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
++}
++
++function contentLengthDelimiter(buffer: Buffer): { index: number; length: number } | undefined {
++  const crlf = buffer.indexOf("\r\n\r\n");
++  if (crlf >= 0) return { index: crlf, length: 4 };
++  const lf = buffer.indexOf("\n\n");
++  return lf >= 0 ? { index: lf, length: 2 } : undefined;
++}
++
++function writeJsonRpc(message: JsonRpcMessage): void {
++  const body = JSON.stringify(message);
++  process.stdout.write(`Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`);
++}
++
++function jsonRpcError(id: JsonRpcId, code: number, message: string): JsonRpcMessage {
++  return { error: { code, message }, id, jsonrpc: "2.0" };
++}
++
++function parseJson(value: string): unknown {
++  try { return JSON.parse(value) as unknown; } catch { return undefined; }
++}
++
++function hasHeader(headers: Record<string, string>, name: string): boolean {
++  return Object.keys(headers).some((key) => key.toLowerCase() === name.toLowerCase());
++}
++
++function requiredEnv(name: string): string {
++  const value = env(name);
++  if (!value) {
++    process.stderr.write(`${name} is required.\n`);
++    process.exit(1);
++  }
++  return value;
++}
++
++function env(name: string): string | undefined {
++  const value = process.env[name]?.trim();
++  return value || undefined;
++}
++
++function clampInteger(value: number, min: number, max: number, fallback: number): number {
++  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.trunc(value))) : fallback;
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++
++function formatError(error: unknown): string {
++  if (error instanceof Error) {
++    return error.name === "AbortError" ? `Remote MCP request timed out after ${requestTimeoutMs}ms.` : error.message;
++  }
++  return String(error);
++}
+diff --git a/packages/core/src/profiles/launch-service.ts b/packages/core/src/profiles/launch-service.ts
+index 9016893..89ffd07 100644
+--- a/packages/core/src/profiles/launch-service.ts
++++ b/packages/core/src/profiles/launch-service.ts
+@@ -30,6 +30,7 @@ export const CCR_CLI_COMPANION_RUNTIME_FILE_NAMES = [
+   "fusion-tool-fallback-mcp.js",
+   "fusion-vision-mcp.js",
+   "media-tools-proxy-mcp.js",
++  "remote-http-proxy-mcp.js",
+   "next-ai-gateway.js",
+   "request-log-worker.js",
+   "route-script-worker.js",
 diff --git a/packages/core/src/web/management-server.ts b/packages/core/src/web/management-server.ts
 index d6de494..7b589c6 100644
 --- a/packages/core/src/web/management-server.ts
@@ -196,6 +558,162 @@ index d6de494..7b589c6 100644
  async function startConfiguredServices(reason: string): Promise<void> {
    try {
      let config = await loadAppConfig();
+diff --git a/packages/core/test/integration/gateway/gateway-virtual-models.test.mjs b/packages/core/test/integration/gateway/gateway-virtual-models.test.mjs
+index 4db9c64..3eb1abb 100644
+--- a/packages/core/test/integration/gateway/gateway-virtual-models.test.mjs
++++ b/packages/core/test/integration/gateway/gateway-virtual-models.test.mjs
+@@ -687,6 +687,25 @@ test("gateway config does not create fallback tools for MCP-backed Fusion tools"
+   assert.deepEqual(definitions.map((definition) => definition.name), ["missing_fusion_tool"]);
+ });
+ 
++test("gateway config maps custom Fusion profile tools to its configured MCP server", () => {
++  const profiles = [{
++    enabled: true,
++    metadata: { fusionTool: { mcpServerName: "bilibili-videoread" } },
++    tools: [
++      { name: "extract_bilibili_video", visibility: "internal" },
++      { name: "extract_bilibili_comments", visibility: "internal" }
++    ]
++  }];
++  const servers = [{ name: "bilibili-videoread", transport: "streamable-http" }];
++
++  const definitions = fusionFallbackToolDefinitions(
++    profiles,
++    fusionToolNamesBackedByMcpServers(servers, profiles)
++  );
++
++  assert.deepEqual(definitions, []);
++});
++
+ test("gateway fallback explains In-app Browser web search requires Desktop integration", () => {
+   const profiles = [
+     {
+diff --git a/packages/core/test/integration/mcp/remote-http-proxy-mcp.test.mjs b/packages/core/test/integration/mcp/remote-http-proxy-mcp.test.mjs
+new file mode 100644
+index 0000000..ed3423a
+--- /dev/null
++++ b/packages/core/test/integration/mcp/remote-http-proxy-mcp.test.mjs
+@@ -0,0 +1,120 @@
++import assert from "node:assert/strict";
++import { spawn } from "node:child_process";
++import { createServer } from "node:http";
++import path from "node:path";
++import test from "node:test";
++
++test("remote HTTP MCP stdio proxy preserves sessions, auth and tool responses", async (t) => {
++  const seen = [];
++  const server = createServer(async (request, response) => {
++    const payload = JSON.parse(await consume(request));
++    seen.push({ authorization: request.headers.authorization, payload, session: request.headers["mcp-session-id"] });
++    const headers = { "content-type": "application/json" };
++    if (payload.method === "initialize") headers["mcp-session-id"] = "session-1";
++    const result = payload.method === "tools/list"
++      ? { tools: [{ name: "extract_bilibili_video", inputSchema: { type: "object" } }] }
++      : payload.method === "tools/call"
++        ? { content: [{ text: "ok", type: "text" }] }
++        : {};
++    response.writeHead(200, headers);
++    response.end(JSON.stringify({ id: payload.id, jsonrpc: "2.0", result }));
++  });
++  try {
++    await listen(server);
++  } catch (error) {
++    if (error?.code === "EPERM" || error?.code === "EACCES") {
++      t.skip(`Local HTTP listen is unavailable: ${error.message}`);
++      return;
++    }
++    throw error;
++  }
++  t.after(() => server.close());
++
++  const address = server.address();
++  assert.ok(address && typeof address === "object");
++  const runtime = path.join(process.cwd(), ".test-dist", "core", "runtime", "remote-http-proxy-mcp.js");
++  const child = spawn(process.execPath, [runtime], {
++    env: {
++      ...process.env,
++      BILIBILI_TEST_TOKEN: "secret-test-token",
++      CCR_REMOTE_MCP_API_KEY_ENV: "BILIBILI_TEST_TOKEN",
++      CCR_REMOTE_MCP_PROTOCOL_VERSION: "2024-11-05",
++      CCR_REMOTE_MCP_REQUEST_TIMEOUT_MS: "5000",
++      CCR_REMOTE_MCP_URL: `http://127.0.0.1:${address.port}/mcp`
++    },
++    stdio: ["pipe", "pipe", "pipe"]
++  });
++  t.after(() => { if (!child.killed) child.kill(); });
++
++  await sendJsonRpc(child, { id: 1, jsonrpc: "2.0", method: "initialize", params: {} });
++  const listed = await sendJsonRpc(child, { id: 2, jsonrpc: "2.0", method: "tools/list", params: {} });
++  const called = await sendJsonRpc(child, {
++    id: 3,
++    jsonrpc: "2.0",
++    method: "tools/call",
++    params: { arguments: { url: "BV1xx411c7mD" }, name: "extract_bilibili_video" }
++  });
++
++  assert.equal(listed.result.tools[0].name, "extract_bilibili_video");
++  assert.equal(called.result.content[0].text, "ok");
++  assert.ok(seen.every((item) => item.authorization === "Bearer secret-test-token"));
++  assert.equal(seen[1].session, "session-1");
++  assert.equal(seen[2].session, "session-1");
++});
++
++function sendJsonRpc(child, payload) {
++  return new Promise((resolve, reject) => {
++    let stdout = Buffer.alloc(0);
++    let stderr = "";
++    const cleanup = () => {
++      clearTimeout(timer);
++      child.stdout.off("data", onStdout);
++      child.stderr.off("data", onStderr);
++      child.off("exit", onExit);
++      child.off("error", onError);
++    };
++    const onStdout = (chunk) => {
++      stdout = Buffer.concat([stdout, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
++      const parsed = readFrame(stdout);
++      if (parsed) { cleanup(); resolve(parsed); }
++    };
++    const onStderr = (chunk) => { stderr += chunk.toString("utf8"); };
++    const onExit = () => { cleanup(); reject(new Error(`proxy exited: ${stderr}`)); };
++    const onError = (error) => { cleanup(); reject(error); };
++    const timer = setTimeout(() => { cleanup(); reject(new Error(`proxy timeout: ${stderr}`)); }, 5000);
++    child.stdout.on("data", onStdout);
++    child.stderr.on("data", onStderr);
++    child.once("exit", onExit);
++    child.once("error", onError);
++    const body = Buffer.from(JSON.stringify(payload));
++    child.stdin.write(`Content-Length: ${body.byteLength}\r\n\r\n`);
++    child.stdin.write(body);
++  });
++}
++
++function readFrame(buffer) {
++  const headerEnd = buffer.indexOf("\r\n\r\n");
++  if (headerEnd < 0) return undefined;
++  const match = /content-length:\s*(\d+)/i.exec(buffer.subarray(0, headerEnd).toString("utf8"));
++  if (!match) return undefined;
++  const start = headerEnd + 4;
++  const end = start + Number(match[1]);
++  return buffer.length >= end ? JSON.parse(buffer.subarray(start, end).toString("utf8")) : undefined;
++}
++
++function listen(server) {
++  return new Promise((resolve, reject) => {
++    server.once("error", reject);
++    server.listen(0, "127.0.0.1", () => { server.off("error", reject); resolve(); });
++  });
++}
++
++function consume(request) {
++  return new Promise((resolve, reject) => {
++    let value = "";
++    request.setEncoding("utf8");
++    request.on("data", (chunk) => { value += chunk; });
++    request.on("end", () => resolve(value));
++    request.on("error", reject);
++  });
++}
 diff --git a/packages/ui/src/pages/home/components/settings.tsx b/packages/ui/src/pages/home/components/settings.tsx
 index 53a527c..0d51443 100644
 --- a/packages/ui/src/pages/home/components/settings.tsx
