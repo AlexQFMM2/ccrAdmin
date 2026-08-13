@@ -33,7 +33,11 @@ chmod +x deploy.sh
 2. 将固定版本的上游 CCR 源码克隆到被 Git 忽略的 `app/`；
 3. 使用腾讯云 Debian 镜像构建容器；
 4. 创建持久化 Docker 卷；
-5. 默认将管理端口发布到服务器的 `127.0.0.1:18080`。
+5. 应用 `patches/` 中针对该固定版本验证过的 CCR 功能补丁；
+6. 默认将管理端口发布到服务器的 `127.0.0.1:18080`。
+
+当前补丁增加原生 Bilibili MCP 管理页。部署前还需在 `.env` 中填写与独立
+`bilibili-mcp` 容器一致的 `BILIBILI_ADMIN_TOKEN` 和 `BILIBILI_MCP_TOKEN`。
 
 `.env`、`app/` 和运行数据均被 `.gitignore` 排除，不会提交到仓库。
 

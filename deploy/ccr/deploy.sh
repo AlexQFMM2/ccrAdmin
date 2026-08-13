@@ -5,6 +5,7 @@ DEPLOY_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="${DEPLOY_DIR}/app"
 SOURCE_REPOSITORY="${CCR_SOURCE_REPOSITORY:-https://github.com/musistudio/claude-code-router.git}"
 SOURCE_REF="${CCR_SOURCE_REF:-f22f2a4c79b2ad51b2b947377f285769470f6e09}"
+PATCH_DIR="${DEPLOY_DIR}/patches"
 
 cd "${DEPLOY_DIR}"
 
@@ -33,6 +34,15 @@ if [[ ! -f .env ]]; then
   echo "Created private deployment configuration: ${DEPLOY_DIR}/.env"
 fi
 
+chmod 600 .env
+for required_variable in CCR_WEB_AUTH_TOKEN BILIBILI_ADMIN_TOKEN BILIBILI_MCP_TOKEN; do
+  value="$(sed -n "s/^${required_variable}=//p" .env | tail -n 1)"
+  if [[ -z "${value}" || "${value}" == replace-* ]]; then
+    echo "Set a private value for ${required_variable} in ${DEPLOY_DIR}/.env before deployment." >&2
+    exit 1
+  fi
+done
+
 if [[ ! -d "${SOURCE_DIR}/.git" ]]; then
   git clone --filter=blob:none --no-checkout "${SOURCE_REPOSITORY}" "${SOURCE_DIR}"
 fi
@@ -45,6 +55,19 @@ fi
 
 git -C "${SOURCE_DIR}" fetch --depth 1 origin "${SOURCE_REF}"
 git -C "${SOURCE_DIR}" checkout --detach FETCH_HEAD
+
+if compgen -G "${PATCH_DIR}/*.patch" >/dev/null; then
+  git -C "${SOURCE_DIR}" am --abort >/dev/null 2>&1 || true
+  for patch_file in "${PATCH_DIR}"/*.patch; do
+    git -C "${SOURCE_DIR}" am "${patch_file}" || {
+      git -C "${SOURCE_DIR}" am --abort >/dev/null 2>&1 || true
+      echo "Failed to apply CCR patch: ${patch_file}" >&2
+      exit 1
+    }
+  done
+fi
+
+docker network inspect ai-tools >/dev/null 2>&1 || docker network create ai-tools
 
 docker compose up -d --build
 docker compose ps
