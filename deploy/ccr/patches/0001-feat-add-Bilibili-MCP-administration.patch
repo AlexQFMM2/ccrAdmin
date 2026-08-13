@@ -1,4 +1,4 @@
-From e59a4a7f4c946fe93185074e86ec2a0d245cbcab Mon Sep 17 00:00:00 2001
+From 54862cce933e270246cce4d6dbd9bf1181dac7b1 Mon Sep 17 00:00:00 2001
 From: AlexQFMM2 <2161582897@qq.com>
 Date: Thu, 13 Aug 2026 09:34:57 +0800
 Subject: [PATCH] feat: add Bilibili MCP administration
@@ -6,13 +6,13 @@ Subject: [PATCH] feat: add Bilibili MCP administration
 ---
  packages/core/src/contracts/app.ts            |  13 ++
  packages/core/src/entrypoints/server.ts       |   2 +-
- packages/core/src/web/management-server.ts    | 117 ++++++++++++++++
+ packages/core/src/web/management-server.ts    | 120 ++++++++++++++++
  .../ui/src/pages/home/components/settings.tsx | 131 +++++++++++++++++-
  packages/ui/src/pages/home/shared/i18n.tsx    |   3 +
  packages/ui/src/pages/home/shared/types.ts    |   2 +-
  packages/ui/src/types/electron.d.ts           |   2 +
  packages/ui/src/web-client-bridge.ts          |   1 +
- 8 files changed, 267 insertions(+), 4 deletions(-)
+ 8 files changed, 270 insertions(+), 4 deletions(-)
 
 diff --git a/packages/core/src/contracts/app.ts b/packages/core/src/contracts/app.ts
 index db51aff..c1ed721 100644
@@ -52,7 +52,7 @@ index 2059d8a..f6fec2a 100644
    let closing = false;
    const shutdown = (signal: NodeJS.Signals) => {
 diff --git a/packages/core/src/web/management-server.ts b/packages/core/src/web/management-server.ts
-index d6de494..31691f8 100644
+index d6de494..7b589c6 100644
 --- a/packages/core/src/web/management-server.ts
 +++ b/packages/core/src/web/management-server.ts
 @@ -39,6 +39,7 @@ import type {
@@ -71,7 +71,7 @@ index d6de494..31691f8 100644
    applyClaudeAppGateway: async (config?: unknown) => {
      const previousConfig = await loadAppConfig();
      const baseConfig = config ? await saveAppConfig(config as AppConfig) : previousConfig;
-@@ -433,6 +435,121 @@ const rpcHandlers: Record<string, RpcHandler> = {
+@@ -433,6 +435,124 @@ const rpcHandlers: Record<string, RpcHandler> = {
    waitBotGatewayQrLogin: (request) => waitBotGatewayQrLogin(request as BotGatewayQrLoginWaitRequest)
  };
  
@@ -186,7 +186,10 @@ index d6de494..31691f8 100644
 +    agent: { ...(config.agent ?? { mcpServers: [] }), mcpServers },
 +    virtualModelProfiles: profiles
 +  });
-+  await gatewayService.updateConfig(saved);
++  const runtimeStatus = await gatewayService.start(saved);
++  if (runtimeStatus.state !== "running") {
++    throw new Error(runtimeStatus.lastError || "CCR gateway did not restart after provisioning Bilibili Fusion.");
++  }
 +  return { alias, baseModel, mcpServer: bilibiliMcpServerName, tools: discovered };
 +}
 +
